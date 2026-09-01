@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Veille d'Ancre</title>
+<meta name="theme-color" content="#0b1520">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Veille d'Ancre">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root{
+    --bg:#0b1520; --panel:#101f30; --panel2:#152a40; --text:#e8f0f7; --muted:#7f97ab;
+    --accent:#2fb6ff; --good:#2fd18b; --warn:#ffb020; --bad:#ff4444; --border:#1e3548;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    overscroll-behavior:none; user-select:none;
+  }
+  #app{max-width:520px; margin:0 auto; padding:14px 14px 40px;}
+  h1{font-size:1.15rem; margin:6px 0 2px; display:flex; align-items:center; gap:8px;}
+  .sub{color:var(--muted); font-size:.8rem; margin-bottom:14px;}
+  .banner{
+    background:#2a1d0d; border:1px solid #6b4a10; color:#ffcf80; border-radius:10px;
+    padding:10px 12px; font-size:.78rem; line-height:1.35; margin-bottom:14px;
+  }
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px; margin-bottom:14px;}
+  .statusRow{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
+  .pill{display:inline-flex; align-items:center; gap:6px; font-size:.75rem; padding:4px 10px; border-radius:999px; background:var(--panel2); border:1px solid var(--border); color:var(--muted);}
+  .dot{width:8px; height:8px; border-radius:50%; background:var(--muted);}
+  .pill.on .dot{background:var(--good); box-shadow:0 0 6px var(--good);}
+  .pill.off .dot{background:var(--muted);}
+  .pill.alarm{background:#3a0f0f; border-color:#7a1c1c; color:#ffb3b3;}
+  .pill.alarm .dot{background:var(--bad); box-shadow:0 0 8px var(--bad);}
+  svg#radar{display:block; width:100%; height:auto; touch-action:none;}
+  .metrics{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:10px;}
+  .metric{background:var(--panel2); border-radius:10px; padding:8px 6px; text-align:center;}
+  .metric .v{font-size:1.05rem; font-weight:600;}
+  .metric .l{font-size:.65rem; color:var(--muted); text-transform:uppercase; letter-spacing:.03em;}
+  .row{display:flex; gap:10px; margin-top:12px;}
+  button{
+    font-family:inherit; font-size:.9rem; font-weight:600; border-radius:12px; border:none;
+    padding:14px 12px; cursor:pointer; flex:1; color:var(--text); background:var(--panel2);
+    border:1px solid var(--border);
+  }
+  button:active{filter:brightness(1.15);}
+  button.primary{background:var(--accent); color:#04202f;}
+  button.good{background:var(--good); color:#04241a;}
+  button.bad{background:var(--bad); color:#2a0505;}
+  button.ghost{background:transparent;}
+  button:disabled{opacity:.4;}
+  label.field{display:block; font-size:.75rem; color:var(--muted); margin:10px 0 4px;}
+  input[type=number], input[type=text], input[type=tel], input[type=email]{
+    width:100%; background:var(--panel2); border:1px solid var(--border); color:var(--text);
+    border-radius:10px; padding:10px 12px; font-size:.95rem;
+  }
+  input[type=range]{width:100%;}
+  .radiusRow{display:flex; align-items:center; gap:10px;}
+  .radiusRow input[type=number]{width:90px; flex:none;}
+  details{margin-top:4px;}
+  summary{cursor:pointer; color:var(--accent); font-size:.85rem; padding:6px 0;}
+  .checkRow{display:flex; align-items:center; gap:8px; margin:8px 0; font-size:.85rem;}
+  .checkRow input{width:18px; height:18px;}
+  .footNote{font-size:.7rem; color:var(--muted); margin-top:6px; line-height:1.4;}
+  #overlay{
+    position:fixed; inset:0; background:#5c0000; z-index:50; display:none;
+    flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px;
+    animation:flash 1s steps(2,start) infinite;
+  }
+  @keyframes flash{50%{background:#1a0000;}}
+  #overlay h2{font-size:1.6rem; margin:0 0 10px;}
+  #overlay p{font-size:1rem; margin:4px 0 20px; color:#ffd6d6;}
+  #overlay button{width:80%; max-width:320px; padding:18px; font-size:1.1rem; margin-top:10px;}
+  body.night{--bg:#000; --panel:#140000; --panel2:#1c0303; --text:#ff5555; --muted:#7a2626; --border:#3a0a0a; --accent:#ff5555;}
+  body.night .pill.on .dot{background:#ff5555; box-shadow:0 0 6px #ff5555;}
+  body.night #radiusCircle{stroke:#ff5555; fill:rgba(255,85,85,0.06);}
+  body.night #anchorMark text, body.night #anchorMark circle{fill:#ff5555;}
+  body.night #boatDot{fill:#ff5555 !important; stroke:#1a0000;}
+  body.night svg#radar line{stroke:#3a0a0a;}
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>⚓ Veille d'Ancre</h1>
+  <div class="sub">Alarme de dérapage à 360° — surveillance GPS locale</div>
+
+  <div class="banner">
+    <b>Important (iPhone) :</b> iOS coupe le GPS des pages web quand l'écran se verrouille. Pour une vraie fiabilité pendant la nuit, laissez le téléphone <b>déverrouillé, à l'écran allumé et en charge</b> près de vous pendant que la veille est armée. L'appli empêche l'écran de s'éteindre automatiquement tant qu'elle est armée.
+  </div>
+
+  <div class="card">
+    <div class="statusRow">
+      <span id="gpsPill" class="pill off"><span class="dot"></span> GPS</span>
+      <span id="armPill" class="pill off"><span class="dot"></span> Désarmée</span>
+    </div>
+
+    <svg id="radar" viewBox="0 0 300 300">
+      <circle cx="150" cy="150" r="130" fill="none" stroke="#1e3548" stroke-width="1"/>
+      <circle id="radiusCircle" cx="150" cy="150" r="130" fill="rgba(47,182,255,0.06)" stroke="#2fb6ff" stroke-width="2" stroke-dasharray="6 5"/>
+      <line x1="150" y1="20" x2="150" y2="280" stroke="#16293a" stroke-width="1"/>
+      <line x1="20" y1="150" x2="280" y2="150" stroke="#16293a" stroke-width="1"/>
+      <g id="anchorMark" transform="translate(150,150)">
+        <circle r="5" fill="#ffb020"/>
+        <text y="-10" text-anchor="middle" font-size="11" fill="#ffb020">⚓</text>
+      </g>
+      <circle id="boatDot" cx="150" cy="150" r="7" fill="#2fd18b" stroke="#04241a" stroke-width="2"/>
+    </svg>
+
+    <div class="metrics">
+      <div class="metric"><div class="v" id="mDist">–</div><div class="l">Distance</div></div>
+      <div class="metric"><div class="v" id="mRadius">–</div><div class="l">Rayon armé</div></div>
+      <div class="metric"><div class="v" id="mAcc">–</div><div class="l">Précision GPS</div></div>
+    </div>
+
+    <label class="field">Rayon de veille (mètres)</label>
+    <div class="radiusRow">
+      <input type="number" id="radiusInput" min="5" max="500" step="1" value="30">
+      <input type="range" id="radiusRange" min="5" max="200" step="1" value="30" style="flex:1">
+    </div>
+    <div class="footNote">Réglez un rayon plus grand que votre longueur de chaîne filée + la précision GPS, pour éviter les fausses alarmes.</div>
+
+    <div class="row">
+      <button id="btnAnchor" class="ghost">📍 Mouiller l'ancre ici</button>
+    </div>
+    <div class="row">
+      <button id="btnArm" class="primary">Armer la veille</button>
+      <button id="btnNight" class="ghost">🌙 Mode nuit</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <details id="notifDetails">
+      <summary>🔔 Alertes à distance (WhatsApp / Email)</summary>
+
+      <div class="checkRow"><input type="checkbox" id="enableWA"> <span>Activer WhatsApp (via CallMeBot)</span></div>
+      <label class="field">Numéro WhatsApp (format international, ex 33612345678)</label>
+      <input type="tel" id="waPhone" placeholder="33612345678">
+      <label class="field">Clé API CallMeBot</label>
+      <input type="text" id="waKey" placeholder="Clé reçue de CallMeBot">
+      <div class="footNote">Pour l'obtenir : ajoutez le contact CallMeBot (+34 644 51 95 23) dans WhatsApp, envoyez-lui "I allow callmebot to send me messages", il vous répond avec votre clé API personnelle. Gratuit.</div>
+
+      <div class="checkRow" style="margin-top:14px;"><input type="checkbox" id="enableEmail"> <span>Activer Email (via EmailJS)</span></div>
+      <label class="field">Email destinataire</label>
+      <input type="email" id="emailTo" placeholder="vous@exemple.com">
+      <label class="field">Service ID / Template ID / Public Key (EmailJS)</label>
+      <input type="text" id="ejsService" placeholder="service_xxx" style="margin-bottom:6px;">
+      <input type="text" id="ejsTemplate" placeholder="template_xxx" style="margin-bottom:6px;">
+      <input type="text" id="ejsKey" placeholder="clé publique EmailJS">
+      <div class="footNote">Créez un compte gratuit sur emailjs.com, connectez votre boîte mail, créez un template avec les variables {{message}} et {{distance}}. Le template_id, service_id et la clé publique se trouvent dans votre tableau de bord EmailJS.</div>
+
+      <div class="row" style="margin-top:12px;">
+        <button id="btnSaveNotif" class="good">Enregistrer</button>
+        <button id="btnTestNotif" class="ghost">Tester l'alerte</button>
+      </div>
+      <div class="footNote" id="notifStatus"></div>
+    </details>
+  </div>
+
+  <div class="footNote" style="text-align:center; opacity:.6;">
+    Fonctionne hors-ligne une fois installée. Ne remplace pas une veille humaine en cas de doute sur la tenue de l'ancre.
+  </div>
+</div>
+
+<div id="overlay">
+  <h2>⚠️ ALARME — DÉRAPAGE D'ANCRE</h2>
+  <p id="overlayDist">Distance : – m (rayon : – m)</p>
+  <button id="btnStopAlarm" class="bad">Arrêter l'alarme</button>
+  <button id="btnReanchor" class="ghost">Réancrer ici et reprendre la veille</button>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const $ = id => document.getElementById(id);
+  const state = load();
+
+  function load(){
+    try{
+      const s = JSON.parse(localStorage.getItem('veilleAncreState')||'{}');
+      return Object.assign({
+        anchor: null, radius: 30, armed: false, night: false,
+        notif: { waEnabled:false, waPhone:'', waKey:'', emailEnabled:false, emailTo:'', ejsService:'', ejsTemplate:'', ejsKey:'' }
+      }, s);
+    }catch(e){ return { anchor:null, radius:30, armed:false, night:false, notif:{} }; }
+  }
+  function save(){ localStorage.setItem('veilleAncreState', JSON.stringify(state)); }
+
+  // ---- form <-> state for notifications ----
+  function fillNotifForm(){
+    $('enableWA').checked = !!state.notif.waEnabled;
+    $('waPhone').value = state.notif.waPhone||'';
+    $('waKey').value = state.notif.waKey||'';
+    $('enableEmail').checked = !!state.notif.emailEnabled;
+    $('emailTo').value = state.notif.emailTo||'';
+    $('ejsService').value = state.notif.ejsService||'';
+    $('ejsTemplate').value = state.notif.ejsTemplate||'';
+    $('ejsKey').value = state.notif.ejsKey||'';
+  }
+  fillNotifForm();
+
+  $('btnSaveNotif').onclick = ()=>{
+    state.notif = {
+      waEnabled: $('enableWA').checked, waPhone: $('waPhone').value.trim(), waKey: $('waKey').value.trim(),
+      emailEnabled: $('enableEmail').checked, emailTo: $('emailTo').value.trim(),
+      ejsService: $('ejsService').value.trim(), ejsTemplate: $('ejsTemplate').value.trim(), ejsKey: $('ejsKey').value.trim()
+    };
+    save();
+    $('notifStatus').textContent = 'Réglages enregistrés.';
+  };
+  $('btnTestNotif').onclick = ()=> sendAlerts(0, true);
+
+  // ---- geo helpers ----
+  const R = 6371000;
+  function toRad(d){return d*Math.PI/180;}
+  function haversine(a,b){
+    const dLat = toRad(b.lat-a.lat), dLon = toRad(b.lon-a.lon);
+    const s = Math.sin(dLat/2)**2 + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLon/2)**2;
+    return 2*R*Math.asin(Math.sqrt(s));
+  }
+  function bearing(a,b){
+    const y = Math.sin(toRad(b.lon-a.lon))*Math.cos(toRad(b.lat));
+    const x = Math.cos(toRad(a.lat))*Math.sin(toRad(b.lat)) - Math.sin(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.cos(toRad(b.lon-a.lon));
+    return (Math.atan2(y,x)*180/Math.PI + 360) % 360;
+  }
+
+  // ---- audio siren ----
+  let actx=null, sirenOsc=null, sirenGain=null, sirenTimer=null;
+  function unlockAudio(){
+    if(!actx){ actx = new (window.AudioContext||window.webkitAudioContext)(); }
+    if(actx.state === 'suspended') actx.resume();
+    const buf = actx.createBuffer(1,1,22050);
+    const src = actx.createBufferSource(); src.buffer=buf; src.connect(actx.destination); src.start(0);
+  }
+  function startSiren(){
+    if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
+    if(actx.state==='suspended') actx.resume();
+    sirenOsc = actx.createOscillator();
+    sirenGain = actx.createGain();
+    sirenOsc.type='sawtooth';
+    sirenGain.gain.value=0.25;
+    sirenOsc.connect(sirenGain).connect(actx.destination);
+    sirenOsc.start();
+    let up=true;
+    sirenTimer = setInterval(()=>{
+      const t=actx.currentTime;
+      sirenOsc.frequency.setTargetAtTime(up?1200:650, t, 0.05);
+      up=!up;
+    }, 450);
+    if(navigator.vibrate) navigator.vibrate([600,300,600,300,600,300,600]);
+  }
+  function stopSiren(){
+    if(sirenTimer) clearInterval(sirenTimer);
+    if(sirenOsc){ try{sirenOsc.stop();}catch(e){} sirenOsc.disconnect(); sirenOsc=null; }
+    if(navigator.vibrate) navigator.vibrate(0);
+  }
+
+  // ---- wake lock ----
+  let wakeLock=null;
+  async function requestWakeLock(){
+    try{ if('wakeLock' in navigator){ wakeLock = await navigator.wakeLock.request('screen'); } }catch(e){}
+  }
+  document.addEventListener('visibilitychange', ()=>{
+    if(state.armed && document.visibilityState==='visible') requestWakeLock();
+  });
+
+  // ---- local notification ----
+  async function localNotify(title, body){
+    if(!('Notification' in window)) return;
+    if(Notification.permission==='default'){ try{ await Notification.requestPermission(); }catch(e){} }
+    if(Notification.permission==='granted'){
+      try{
+        if(navigator.serviceWorker && navigator.serviceWorker.ready){
+          const reg = await navigator.serviceWorker.ready;
+          reg.showNotification(title, {body, tag:'anchor-alarm', requireInteraction:true});
+        } else {
+          new Notification(title, {body});
+        }
+      }catch(e){}
+    }
+  }
+
+  // ---- remote alerts ----
+  let lastAlertSent = 0;
+  async function sendAlerts(distance, isTest){
+    const now = Date.now();
+    if(!isTest && now - lastAlertSent < 60000) return; // cooldown 60s
+    lastAlertSent = now;
+    const msg = isTest
+      ? "Test Veille d'Ancre : ceci est un message de test."
+      : `ALARME veille d'ancre : le bateau a dérapé au-delà de ${state.radius}m (distance actuelle ${Math.round(distance)}m).`;
+
+    const n = state.notif;
+    let statusMsgs = [];
+
+    if(n.waEnabled && n.waPhone && n.waKey){
+      const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(n.waPhone)}&text=${encodeURIComponent(msg)}&apikey=${encodeURIComponent(n.waKey)}`;
+      try{ await fetch(url, {mode:'no-cors'}); statusMsgs.push('WhatsApp envoyé'); }
+      catch(e){ statusMsgs.push('WhatsApp: échec'); }
+    }
+    if(n.emailEnabled && n.emailTo && n.ejsService && n.ejsTemplate && n.ejsKey){
+      try{
+        const r = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            service_id:n.ejsService, template_id:n.ejsTemplate, user_id:n.ejsKey,
+            template_params:{ to_email:n.emailTo, message:msg, distance:Math.round(distance), radius:state.radius }
+          })
+        });
+        statusMsgs.push(r.ok ? 'Email envoyé' : 'Email: échec ('+r.status+')');
+      }catch(e){ statusMsgs.push('Email: échec réseau'); }
+    }
+    if(isTest) $('notifStatus').textContent = statusMsgs.length ? statusMsgs.join(' · ') : 'Activez et enregistrez au moins un canal.';
+  }
+
+  // ---- radar drawing ----
+  const PX_R = 130;
+  function drawRadar(dist, brg){
+    let px=150, py=150;
+    if(state.anchor && dist!=null){
+      const scale = Math.min(dist, state.radius*1.4) / state.radius;
+      const clampedDist = Math.min(dist/state.radius, 1) * PX_R;
+      const rad = toRad(brg||0);
+      px = 150 + clampedDist*Math.sin(rad);
+      py = 150 - clampedDist*Math.cos(rad);
+    }
+    $('boatDot').setAttribute('cx', px);
+    $('boatDot').setAttribute('cy', py);
+    $('boatDot').setAttribute('fill', (state.armed && dist!=null && dist>state.radius) ? '#ff4444' : '#2fd18b');
+  }
+
+  function updateRadiusVisual(){
+    $('mRadius').textContent = state.radius + ' m';
+    $('radiusInput').value = state.radius;
+    $('radiusRange').value = Math.min(state.radius,200);
+  }
+
+  // ---- alarm control ----
+  let alarmActive = false;
+  let breachCount = 0;
+  function triggerAlarm(dist){
+    if(alarmActive) return;
+    alarmActive = true;
+    $('overlay').style.display='flex';
+    $('overlayDist').textContent = `Distance : ${Math.round(dist)} m (rayon : ${state.radius} m)`;
+    startSiren();
+    localNotify('⚠️ Dérapage d\'ancre', `Distance ${Math.round(dist)}m, rayon armé ${state.radius}m.`);
+    sendAlerts(dist, false);
+  }
+  function clearAlarm(){
+    alarmActive = false;
+    breachCount = 0;
+    $('overlay').style.display='none';
+    stopSiren();
+  }
+  $('btnStopAlarm').onclick = ()=>{ clearAlarm(); };
+  $('btnReanchor').onclick = ()=>{
+    clearAlarm();
+    if(state.lastPos){ state.anchor = {lat:state.lastPos.lat, lon:state.lastPos.lon}; save(); }
+  };
+
+  // ---- geolocation ----
+  let watchId = null;
+  function onPosition(pos){
+    const lat=pos.coords.latitude, lon=pos.coords.longitude, acc=pos.coords.accuracy;
+    state.lastPos = {lat,lon};
+    $('gpsPill').className = 'pill on'; $('gpsPill').innerHTML = '<span class="dot"></span> GPS actif';
+    $('mAcc').textContent = Math.round(acc) + ' m';
+
+    if(state.anchor){
+      const dist = haversine(state.anchor, {lat,lon});
+      const brg = bearing(state.anchor, {lat,lon});
+      $('mDist').textContent = Math.round(dist) + ' m';
+      drawRadar(dist, brg);
+
+      if(state.armed){
+        if(dist > state.radius){
+          breachCount++;
+          if(breachCount >= 3) triggerAlarm(dist);
+        } else {
+          breachCount = 0;
+          if(alarmActive) clearAlarm();
+        }
+      }
+    } else {
+      $('mDist').textContent = '–';
+      drawRadar(null, 0);
+    }
+  }
+  function onGeoError(err){
+    $('gpsPill').className='pill off';
+    $('gpsPill').innerHTML = '<span class="dot"></span> GPS: '+(err.message||'erreur');
+  }
+  function startWatch(){
+    if(watchId!=null || !navigator.geolocation) return;
+    watchId = navigator.geolocation.watchPosition(onPosition, onGeoError, {
+      enableHighAccuracy:true, maximumAge:2000, timeout:15000
+    });
+  }
+
+  // ---- UI wiring ----
+  function refreshArmUI(){
+    $('armPill').className = 'pill ' + (state.armed?'on':'off');
+    $('armPill').innerHTML = '<span class="dot"></span> ' + (state.armed?'Armée':'Désarmée');
+    $('btnArm').textContent = state.armed ? 'Désarmer' : 'Armer la veille';
+    $('btnArm').className = state.armed ? 'bad' : 'primary';
+  }
+
+  $('btnAnchor').onclick = ()=>{
+    if(!state.lastPos){ alert("Position GPS pas encore disponible, patientez quelques secondes."); return; }
+    state.anchor = {lat:state.lastPos.lat, lon:state.lastPos.lon};
+    breachCount = 0;
+    save();
+  };
+
+  $('btnArm').onclick = async ()=>{
+    if(!state.armed){
+      if(!state.anchor){ alert("Mouillez l'ancre d'abord (bouton \"Mouiller l'ancre ici\")."); return; }
+      unlockAudio();
+      if('Notification' in window && Notification.permission==='default'){ try{ await Notification.requestPermission(); }catch(e){} }
+      state.armed = true;
+      await requestWakeLock();
+    } else {
+      state.armed = false;
+      clearAlarm();
+      if(wakeLock){ try{wakeLock.release();}catch(e){} wakeLock=null; }
+    }
+    save();
+    refreshArmUI();
+  };
+
+  $('btnNight').onclick = ()=>{
+    state.night = !state.night;
+    document.body.classList.toggle('night', state.night);
+    save();
+  };
+
+  $('radiusInput').oninput = (e)=>{
+    state.radius = Math.max(5, parseInt(e.target.value||'30',10));
+    $('radiusRange').value = Math.min(state.radius,200);
+    updateRadiusVisual(); save();
+  };
+  $('radiusRange').oninput = (e)=>{
+    state.radius = parseInt(e.target.value,10);
+    $('radiusInput').value = state.radius;
+    updateRadiusVisual(); save();
+  };
+
+  // ---- init ----
+  updateRadiusVisual();
+  refreshArmUI();
+  if(state.night) document.body.classList.add('night');
+  startWatch();
+  if(state.armed) requestWakeLock();
+
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+})();
+</script>
+</body>
+</html>
