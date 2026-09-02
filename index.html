@@ -68,8 +68,14 @@
   .coordGroup + .coordGroup{border-top:1px solid var(--border); margin-top:2px;}
   .coordGroupLabel{color:var(--muted); font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px;}
   .coordLine{display:flex; align-items:baseline; gap:8px; padding:1px 0;}
-  .coordFmt{color:var(--muted); font-size:.65rem; width:28px; flex:none; font-weight:700;}
-  .coordVal{font-variant-numeric:tabular-nums; font-size:.88rem; font-weight:600;}
+  .coordVal{font-variant-numeric:tabular-nums; font-size:.95rem; font-weight:600;}
+  .segmented{display:flex; gap:6px; margin:10px 0 12px;}
+  .segBtn{flex:1; padding:9px 4px; font-size:.76rem; font-weight:600; border-radius:8px; background:var(--panel2); border:1px solid var(--border); color:var(--muted); cursor:pointer;}
+  .segBtn.active{background:var(--accent); color:#04202f; border-color:var(--accent);}
+  .dmsRow{display:flex; align-items:center; gap:3px; margin-bottom:10px;}
+  .dmsRow input[type=number]{width:100%; min-width:0; text-align:center; padding:10px 2px;}
+  .dmsSym{color:var(--muted); flex:none; font-size:.8rem;}
+  .dmsRow select{background:var(--panel2); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:10px 6px; flex:none; font-size:.85rem;}
   details{margin-top:4px;}
   summary{cursor:pointer; color:var(--accent); font-size:.85rem; padding:6px 0;}
   .checkRow{display:flex; align-items:center; gap:8px; margin:8px 0; font-size:.85rem;}
@@ -128,15 +134,11 @@
     <div class="coordBlock">
       <div class="coordGroup">
         <div class="coordGroupLabel">Position actuelle</div>
-        <div class="coordLine"><span class="coordFmt">DD</span><span class="coordVal" id="coordCurrentDec">–</span></div>
-        <div class="coordLine"><span class="coordFmt">DM</span><span class="coordVal" id="coordCurrentDMM">–</span></div>
-        <div class="coordLine"><span class="coordFmt">DMS</span><span class="coordVal" id="coordCurrentDMS">–</span></div>
+        <div class="coordLine"><span class="coordVal" id="coordCurrentDMS">–</span></div>
       </div>
       <div class="coordGroup">
         <div class="coordGroupLabel">Ancre</div>
-        <div class="coordLine"><span class="coordFmt">DD</span><span class="coordVal" id="coordAnchorDec">–</span></div>
-        <div class="coordLine"><span class="coordFmt">DM</span><span class="coordVal" id="coordAnchorDMM">–</span></div>
-        <div class="coordLine"><span class="coordFmt">DMS</span><span class="coordVal" id="coordAnchorDMS">–</span></div>
+        <div class="coordLine"><span class="coordVal" id="coordAnchorDMS">–</span></div>
       </div>
     </div>
 
@@ -153,14 +155,46 @@
 
     <details id="manualAnchorDetails">
       <summary>✏️ Régler l'ancre manuellement</summary>
-      <label class="field">Latitude, degrés décimaux (positif = N, négatif = S), ex 43.50021</label>
-      <input type="text" inputmode="decimal" id="manualLat" placeholder="43.50021">
-      <label class="field">Longitude, degrés décimaux (positif = E, négatif = W), ex 7.00034</label>
-      <input type="text" inputmode="decimal" id="manualLon" placeholder="7.00034">
+
+      <div class="segmented" id="manualModeSeg">
+        <button type="button" class="segBtn active" data-mode="dms">Degrés / min / sec</button>
+        <button type="button" class="segBtn" data-mode="dec">Degrés décimaux</button>
+      </div>
+
+      <div id="manualDMS">
+        <label class="field">Latitude</label>
+        <div class="dmsRow">
+          <input type="number" id="latDeg" min="0" max="90" step="1" placeholder="43">
+          <span class="dmsSym">°</span>
+          <input type="number" id="latMin" min="0" max="59" step="1" placeholder="30">
+          <span class="dmsSym">'</span>
+          <input type="number" id="latSec" min="0" max="59.9" step="0.1" placeholder="00.8">
+          <span class="dmsSym">"</span>
+          <select id="latDir"><option value="N">N</option><option value="S">S</option></select>
+        </div>
+        <label class="field">Longitude</label>
+        <div class="dmsRow">
+          <input type="number" id="lonDeg" min="0" max="180" step="1" placeholder="7">
+          <span class="dmsSym">°</span>
+          <input type="number" id="lonMin" min="0" max="59" step="1" placeholder="0">
+          <span class="dmsSym">'</span>
+          <input type="number" id="lonSec" min="0" max="59.9" step="0.1" placeholder="01.2">
+          <span class="dmsSym">"</span>
+          <select id="lonDir"><option value="E">E</option><option value="W">W</option></select>
+        </div>
+      </div>
+
+      <div id="manualDec" style="display:none;">
+        <label class="field">Latitude, degrés décimaux (positif = N, négatif = S), ex 43.50021</label>
+        <input type="text" inputmode="decimal" id="manualLat" placeholder="43.50021">
+        <label class="field">Longitude, degrés décimaux (positif = E, négatif = W), ex 7.00034</label>
+        <input type="text" inputmode="decimal" id="manualLon" placeholder="7.00034">
+      </div>
+
       <div class="row" style="margin-top:10px;">
         <button id="btnManualAnchor" class="good">Définir l'ancre à ces coordonnées</button>
       </div>
-      <div class="footNote">Utile pour reprendre exactement les coordonnées affichées par votre GPS/traceur de bord, ou pour ajuster la position réelle de l'ancre. Si votre instrument affiche des degrés/minutes (ex 43°30.013'N), divisez les minutes par 60 et ajoutez aux degrés (30.013/60 = 0.50021 → 43.50021).</div>
+      <div class="footNote">Utile pour reprendre exactement les coordonnées affichées par votre GPS/traceur de bord, ou pour ajuster la position réelle de l'ancre.</div>
     </details>
     <div class="row">
       <button id="btnArm" class="primary">Armer la veille</button>
@@ -265,11 +299,6 @@
   }
 
   // ---- coordinate formatting ----
-  function fmtDec(lat,lon){
-    const latLetter = lat>=0 ? 'N' : 'S';
-    const lonLetter = lon>=0 ? 'E' : 'W';
-    return Math.abs(lat).toFixed(5) + '°' + latLetter + '  ' + Math.abs(lon).toFixed(5) + '°' + lonLetter;
-  }
   function dmsParts(v){
     const av = Math.abs(v);
     const deg = Math.floor(av);
@@ -277,16 +306,6 @@
     const min = Math.floor(minFull);
     const sec = (minFull-min)*60;
     return {deg, min, sec};
-  }
-  function fmtDMM(lat,lon){
-    function part(v, posLetter, negLetter, degDigits){
-      const letter = v>=0 ? posLetter : negLetter;
-      let {deg, min, sec} = dmsParts(v);
-      let minStr = (min + sec/60).toFixed(3);
-      if(parseFloat(minStr) >= 60){ minStr = '00.000'; deg += 1; }
-      return String(deg).padStart(degDigits,'0') + '°' + minStr.padStart(6,'0') + "'" + letter;
-    }
-    return part(lat,'N','S',2) + '  ' + part(lon,'E','W',3);
   }
   function fmtDMS(lat,lon){
     function part(v, posLetter, negLetter, degDigits){
@@ -298,13 +317,10 @@
     }
     return part(lat,'N','S',2) + '  ' + part(lon,'E','W',3);
   }
-  function showCoords(decEl, dmmEl, dmsEl, pos){
-    if(!pos){ $(decEl).textContent='–'; $(dmmEl).textContent='–'; $(dmsEl).textContent='–'; return; }
-    $(decEl).textContent = fmtDec(pos.lat, pos.lon);
-    $(dmmEl).textContent = fmtDMM(pos.lat, pos.lon);
-    $(dmsEl).textContent = fmtDMS(pos.lat, pos.lon);
+  function showCoords(dmsEl, pos){
+    $(dmsEl).textContent = pos ? fmtDMS(pos.lat, pos.lon) : '–';
   }
-  showCoords('coordAnchorDec','coordAnchorDMM','coordAnchorDMS', state.anchor);
+  showCoords('coordAnchorDMS', state.anchor);
 
   // ---- audio siren ----
   let actx=null, sirenOsc=null, sirenGain=null, sirenTimer=null;
@@ -465,7 +481,7 @@
       state.anchor = {lat:state.lastPos.lat, lon:state.lastPos.lon};
       breachCount = 0;
       save();
-      showCoords('coordAnchorDec','coordAnchorDMM','coordAnchorDMS', state.anchor);
+      showCoords('coordAnchorDMS', state.anchor);
       refreshAnchorVisual();
     }
   };
@@ -477,7 +493,7 @@
     state.lastPos = {lat,lon};
     $('gpsPill').className = 'pill on'; $('gpsPill').innerHTML = '<span class="dot"></span> GPS actif';
     $('mAcc').textContent = Math.round(acc) + ' m';
-    showCoords('coordCurrentDec','coordCurrentDMM','coordCurrentDMS', {lat,lon});
+    showCoords('coordCurrentDMS', {lat,lon});
 
     if(state.anchor){
       const dist = haversine(state.anchor, {lat,lon});
@@ -523,21 +539,46 @@
     state.anchor = {lat:state.lastPos.lat, lon:state.lastPos.lon};
     breachCount = 0;
     save();
-    showCoords('coordAnchorDec','coordAnchorDMM','coordAnchorDMS', state.anchor);
+    showCoords('coordAnchorDMS', state.anchor);
     refreshAnchorVisual();
   };
 
+  let manualMode = 'dms';
+  document.querySelectorAll('#manualModeSeg .segBtn').forEach(btn=>{
+    btn.onclick = ()=>{
+      manualMode = btn.dataset.mode;
+      document.querySelectorAll('#manualModeSeg .segBtn').forEach(b=>b.classList.toggle('active', b===btn));
+      $('manualDMS').style.display = manualMode==='dms' ? '' : 'none';
+      $('manualDec').style.display = manualMode==='dec' ? '' : 'none';
+    };
+  });
+
+  function dmsToDecimal(deg, min, sec, dir){
+    if(!isFinite(deg) || deg<0) return NaN;
+    min = isFinite(min) ? min : 0;
+    sec = isFinite(sec) ? sec : 0;
+    if(min<0 || min>59 || sec<0 || sec>=60) return NaN;
+    const val = deg + min/60 + sec/3600;
+    return (dir==='S' || dir==='W') ? -val : val;
+  }
+
   $('btnManualAnchor').onclick = ()=>{
-    const lat = parseFloat(($('manualLat').value||'').replace(',','.'));
-    const lon = parseFloat(($('manualLon').value||'').replace(',','.'));
+    let lat, lon;
+    if(manualMode === 'dms'){
+      lat = dmsToDecimal(parseFloat($('latDeg').value), parseFloat($('latMin').value), parseFloat($('latSec').value), $('latDir').value);
+      lon = dmsToDecimal(parseFloat($('lonDeg').value), parseFloat($('lonMin').value), parseFloat($('lonSec').value), $('lonDir').value);
+    } else {
+      lat = parseFloat(($('manualLat').value||'').replace(',','.'));
+      lon = parseFloat(($('manualLon').value||'').replace(',','.'));
+    }
     if(!isFinite(lat) || !isFinite(lon) || lat<-90 || lat>90 || lon<-180 || lon>180){
-      alert("Coordonnées invalides. Utilisez des degrés décimaux, ex. latitude 43.50021, longitude 7.00034.");
+      alert("Coordonnées invalides. Vérifiez les degrés, minutes (0-59) et secondes (0-59.9) saisis.");
       return;
     }
     state.anchor = {lat, lon};
     breachCount = 0;
     save();
-    showCoords('coordAnchorDec','coordAnchorDMM','coordAnchorDMS', state.anchor);
+    showCoords('coordAnchorDMS', state.anchor);
     refreshAnchorVisual();
     $('manualAnchorDetails').open = false;
   };
