@@ -63,6 +63,12 @@
   input[type=range]{width:100%;}
   .radiusRow{display:flex; align-items:center; gap:10px;}
   .radiusRow input[type=number]{width:90px; flex:none;}
+  .coordBlock{background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:8px 10px; margin-top:10px; font-size:.8rem;}
+  .coordRow{display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; padding:3px 0;}
+  .coordRow + .coordRow{border-top:1px solid var(--border);}
+  .coordLabel{color:var(--muted); width:100px; flex:none;}
+  .coordVal{font-variant-numeric:tabular-nums; font-weight:600;}
+  .coordValAlt{font-variant-numeric:tabular-nums; color:var(--muted); font-size:.78em;}
   details{margin-top:4px;}
   summary{cursor:pointer; color:var(--accent); font-size:.85rem; padding:6px 0;}
   .checkRow{display:flex; align-items:center; gap:8px; margin:8px 0; font-size:.85rem;}
@@ -118,6 +124,17 @@
       <div class="metric"><div class="v" id="mAcc">–</div><div class="l">Précision GPS</div></div>
     </div>
 
+    <div class="coordBlock">
+      <div class="coordRow"><span class="coordLabel">Position actuelle</span>
+        <span class="coordVal" id="coordCurrentDec">–</span>
+        <span class="coordValAlt" id="coordCurrentDMM">–</span>
+      </div>
+      <div class="coordRow"><span class="coordLabel">Ancre</span>
+        <span class="coordVal" id="coordAnchorDec">–</span>
+        <span class="coordValAlt" id="coordAnchorDMM">–</span>
+      </div>
+    </div>
+
     <label class="field">Rayon de veille (mètres)</label>
     <div class="radiusRow">
       <input type="number" id="radiusInput" min="5" max="500" step="1" value="30">
@@ -126,8 +143,20 @@
     <div class="footNote">Réglez un rayon plus grand que votre longueur de chaîne filée + la précision GPS, pour éviter les fausses alarmes.</div>
 
     <div class="row">
-      <button id="btnAnchor" class="ghost">📍 Mouiller l'ancre ici</button>
+      <button id="btnAnchor" class="ghost">📍 Mouiller l'ancre ici (GPS)</button>
     </div>
+
+    <details id="manualAnchorDetails">
+      <summary>✏️ Régler l'ancre manuellement</summary>
+      <label class="field">Latitude (degrés décimaux, ex 43.50021)</label>
+      <input type="text" inputmode="decimal" id="manualLat" placeholder="43.50021">
+      <label class="field">Longitude (degrés décimaux, ex 7.00034)</label>
+      <input type="text" inputmode="decimal" id="manualLon" placeholder="7.00034">
+      <div class="row" style="margin-top:10px;">
+        <button id="btnManualAnchor" class="good">Définir l'ancre à ces coordonnées</button>
+      </div>
+      <div class="footNote">Utile pour reprendre exactement les coordonnées affichées par votre GPS/traceur de bord, ou pour ajuster la position réelle de l'ancre.</div>
+    </details>
     <div class="row">
       <button id="btnArm" class="primary">Armer la veille</button>
       <button id="btnNight" class="ghost">🌙 Mode nuit</button>
@@ -229,6 +258,29 @@
     const x = Math.cos(toRad(a.lat))*Math.sin(toRad(b.lat)) - Math.sin(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.cos(toRad(b.lon-a.lon));
     return (Math.atan2(y,x)*180/Math.PI + 360) % 360;
   }
+
+  // ---- coordinate formatting ----
+  function fmtDec(lat,lon){
+    return lat.toFixed(5) + ', ' + lon.toFixed(5);
+  }
+  function fmtDMM(lat,lon){
+    function part(v, posLetter, negLetter, degDigits){
+      const letter = v>=0 ? posLetter : negLetter;
+      const av = Math.abs(v);
+      const deg = Math.floor(av);
+      const min = (av-deg)*60;
+      const degStr = String(deg).padStart(degDigits,'0');
+      const minStr = min.toFixed(3).padStart(6,'0');
+      return degStr + '°' + minStr + "'" + letter;
+    }
+    return part(lat,'N','S',2) + ' ' + part(lon,'E','W',3);
+  }
+  function showCoords(decEl, dmmEl, pos){
+    if(!pos){ $(decEl).textContent='–'; $(dmmEl).textContent='–'; return; }
+    $(decEl).textContent = fmtDec(pos.lat, pos.lon);
+    $(dmmEl).textContent = fmtDMM(pos.lat, pos.lon);
+  }
+  showCoords('coordAnchorDec','coordAnchorDMM', state.anchor);
 
   // ---- audio siren ----
   let actx=null, sirenOsc=null, sirenGain=null, sirenTimer=null;
@@ -362,7 +414,11 @@
   $('btnStopAlarm').onclick = ()=>{ clearAlarm(); };
   $('btnReanchor').onclick = ()=>{
     clearAlarm();
-    if(state.lastPos){ state.anchor = {lat:state.lastPos.lat, lon:state.lastPos.lon}; save(); }
+    if(state.lastPos){
+      state.anchor = {lat:state.lastPos.lat, lon:state.lastPos.lon};
+      save();
+      showCoords('coordAnchorDec','coordAnchorDMM', state.anchor);
+    }
   };
 
   // ---- geolocation ----
@@ -372,6 +428,7 @@
     state.lastPos = {lat,lon};
     $('gpsPill').className = 'pill on'; $('gpsPill').innerHTML = '<span class="dot"></span> GPS actif';
     $('mAcc').textContent = Math.round(acc) + ' m';
+    showCoords('coordCurrentDec','coordCurrentDMM', {lat,lon});
 
     if(state.anchor){
       const dist = haversine(state.anchor, {lat,lon});
@@ -417,6 +474,21 @@
     state.anchor = {lat:state.lastPos.lat, lon:state.lastPos.lon};
     breachCount = 0;
     save();
+    showCoords('coordAnchorDec','coordAnchorDMM', state.anchor);
+  };
+
+  $('btnManualAnchor').onclick = ()=>{
+    const lat = parseFloat(($('manualLat').value||'').replace(',','.'));
+    const lon = parseFloat(($('manualLon').value||'').replace(',','.'));
+    if(!isFinite(lat) || !isFinite(lon) || lat<-90 || lat>90 || lon<-180 || lon>180){
+      alert("Coordonnées invalides. Utilisez des degrés décimaux, ex. latitude 43.50021, longitude 7.00034.");
+      return;
+    }
+    state.anchor = {lat, lon};
+    breachCount = 0;
+    save();
+    showCoords('coordAnchorDec','coordAnchorDMM', state.anchor);
+    $('manualAnchorDetails').open = false;
   };
 
   $('btnArm').onclick = async ()=>{
