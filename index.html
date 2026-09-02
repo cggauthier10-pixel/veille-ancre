@@ -213,6 +213,10 @@
       <input type="text" id="waKey" placeholder="Clé reçue de CallMeBot">
       <div class="footNote">Pour l'obtenir : ajoutez le contact CallMeBot (+34 644 51 95 23) dans WhatsApp, envoyez-lui "I allow callmebot to send me messages", il vous répond avec votre clé API personnelle. Gratuit.</div>
 
+      <label class="field">Alerter par WhatsApp si perte du signal GPS pendant plus de (secondes)</label>
+      <input type="number" id="gpsLossSec" min="10" max="3600" step="5" value="60">
+      <div class="footNote">Envoyé automatiquement tant que la veille est armée et qu'aucune position GPS n'est reçue pendant ce délai. Le désarmement de la veille envoie aussi systématiquement un WhatsApp, sans réglage nécessaire.</div>
+
       <div class="checkRow" style="margin-top:14px;"><input type="checkbox" id="enableEmail"> <span>Activer Email (via EmailJS)</span></div>
       <label class="field">Email destinataire</label>
       <input type="email" id="emailTo" placeholder="vous@exemple.com">
@@ -247,16 +251,16 @@
   "use strict";
 
   const $ = id => document.getElementById(id);
+  const NOTIF_DEFAULTS = { waEnabled:false, waPhone:'', waKey:'', emailEnabled:false, emailTo:'', ejsService:'', ejsTemplate:'', ejsKey:'', gpsLossSec:60 };
   const state = load();
 
   function load(){
     try{
       const s = JSON.parse(localStorage.getItem('veilleAncreState')||'{}');
-      return Object.assign({
-        anchor: null, radius: 30, armed: false, night: false,
-        notif: { waEnabled:false, waPhone:'', waKey:'', emailEnabled:false, emailTo:'', ejsService:'', ejsTemplate:'', ejsKey:'' }
-      }, s);
-    }catch(e){ return { anchor:null, radius:30, armed:false, night:false, notif:{} }; }
+      const merged = Object.assign({ anchor: null, radius: 30, armed: false, night: false, notif: NOTIF_DEFAULTS }, s);
+      merged.notif = Object.assign({}, NOTIF_DEFAULTS, s.notif||{});
+      return merged;
+    }catch(e){ return { anchor:null, radius:30, armed:false, night:false, notif:Object.assign({},NOTIF_DEFAULTS) }; }
   }
   function save(){ localStorage.setItem('veilleAncreState', JSON.stringify(state)); }
 
@@ -270,6 +274,7 @@
     $('ejsService').value = state.notif.ejsService||'';
     $('ejsTemplate').value = state.notif.ejsTemplate||'';
     $('ejsKey').value = state.notif.ejsKey||'';
+    $('gpsLossSec').value = state.notif.gpsLossSec || 60;
   }
   fillNotifForm();
 
@@ -277,7 +282,8 @@
     state.notif = {
       waEnabled: $('enableWA').checked, waPhone: $('waPhone').value.trim(), waKey: $('waKey').value.trim(),
       emailEnabled: $('enableEmail').checked, emailTo: $('emailTo').value.trim(),
-      ejsService: $('ejsService').value.trim(), ejsTemplate: $('ejsTemplate').value.trim(), ejsKey: $('ejsKey').value.trim()
+      ejsService: $('ejsService').value.trim(), ejsTemplate: $('ejsTemplate').value.trim(), ejsKey: $('ejsKey').value.trim(),
+      gpsLossSec: Math.max(10, parseInt($('gpsLossSec').value,10) || 60)
     };
     save();
     $('notifStatus').textContent = 'Réglages enregistrés.';
@@ -379,6 +385,14 @@
   }
 
   // ---- remote alerts ----
+  async function sendWhatsApp(msg){
+    const n = state.notif;
+    if(!(n.waEnabled && n.waPhone && n.waKey)) return false;
+    const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(n.waPhone)}&text=${encodeURIComponent(msg)}&apikey=${encodeURIComponent(n.waKey)}`;
+    try{ await fetch(url, {mode:'no-cors'}); return true; }
+    catch(e){ return false; }
+  }
+
   let lastAlertSent = 0;
   async function sendAlerts(distance, isTest){
     const now = Date.now();
@@ -392,9 +406,8 @@
     let statusMsgs = [];
 
     if(n.waEnabled && n.waPhone && n.waKey){
-      const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(n.waPhone)}&text=${encodeURIComponent(msg)}&apikey=${encodeURIComponent(n.waKey)}`;
-      try{ await fetch(url, {mode:'no-cors'}); statusMsgs.push('WhatsApp envoyé'); }
-      catch(e){ statusMsgs.push('WhatsApp: échec'); }
+      const ok = await sendWhatsApp(msg);
+      statusMsgs.push(ok ? 'WhatsApp envoyé' : 'WhatsApp: échec');
     }
     if(n.emailEnabled && n.emailTo && n.ejsService && n.ejsTemplate && n.ejsKey){
       try{
@@ -488,9 +501,16 @@
 
   // ---- geolocation ----
   let watchId = null;
+  let lastFixTime = null;
+  let gpsLossAlerted = false;
   function onPosition(pos){
     const lat=pos.coords.latitude, lon=pos.coords.longitude, acc=pos.coords.accuracy;
     state.lastPos = {lat,lon};
+    lastFixTime = Date.now();
+    if(gpsLossAlerted){
+      gpsLossAlerted = false;
+      sendWhatsApp("✅ Veille d'ancre : signal GPS retrouvé.");
+    }
     $('gpsPill').className = 'pill on'; $('gpsPill').innerHTML = '<span class="dot"></span> GPS actif';
     $('mAcc').textContent = Math.round(acc) + ' m';
     showCoords('coordCurrentDMS', {lat,lon});
@@ -525,6 +545,19 @@
       enableHighAccuracy:true, maximumAge:2000, timeout:15000
     });
   }
+
+  // Vérifie périodiquement si le signal GPS a été perdu trop longtemps pendant que la veille est armée.
+  setInterval(()=>{
+    if(!state.armed || !lastFixTime || gpsLossAlerted) return;
+    const thresholdSec = Math.max(10, state.notif.gpsLossSec||60);
+    const lossSec = (Date.now() - lastFixTime) / 1000;
+    if(lossSec > thresholdSec){
+      gpsLossAlerted = true;
+      const msg = `⚠️ Veille d'ancre : perte du signal GPS depuis plus de ${thresholdSec}s. Impossible de vérifier la position du bateau.`;
+      sendWhatsApp(msg);
+      localNotify('⚠️ Perte de signal GPS', `Aucune position reçue depuis plus de ${thresholdSec}s.`);
+    }
+  }, 5000);
 
   // ---- UI wiring ----
   function refreshArmUI(){
@@ -593,7 +626,14 @@
     } else {
       state.armed = false;
       clearAlarm();
+      gpsLossAlerted = false;
       if(wakeLock){ try{wakeLock.release();}catch(e){} wakeLock=null; }
+      const time = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+      let distTxt = '';
+      if(state.anchor && state.lastPos){
+        distTxt = ` Dernière distance à l'ancre : ${Math.round(haversine(state.anchor, state.lastPos))}m.`;
+      }
+      sendWhatsApp(`🔓 Veille d'ancre désarmée à ${time}.${distTxt}`);
     }
     save();
     refreshArmUI();
