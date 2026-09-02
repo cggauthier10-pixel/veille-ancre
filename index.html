@@ -68,7 +68,8 @@
   .coordGroup + .coordGroup{border-top:1px solid var(--border); margin-top:2px;}
   .coordGroupLabel{color:var(--muted); font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px;}
   .coordLine{display:flex; align-items:baseline; gap:8px; padding:1px 0;}
-  .coordVal{font-variant-numeric:tabular-nums; font-size:.95rem; font-weight:600;}
+  .coordFmt{color:var(--muted); font-size:.65rem; width:28px; flex:none; font-weight:700;}
+  .coordVal{font-variant-numeric:tabular-nums; font-size:.85rem; font-weight:600;}
   .segmented{display:flex; gap:6px; margin:10px 0 12px;}
   .segBtn{flex:1; padding:9px 4px; font-size:.76rem; font-weight:600; border-radius:8px; background:var(--panel2); border:1px solid var(--border); color:var(--muted); cursor:pointer;}
   .segBtn.active{background:var(--accent); color:#04202f; border-color:var(--accent);}
@@ -134,11 +135,15 @@
     <div class="coordBlock">
       <div class="coordGroup">
         <div class="coordGroupLabel">Position actuelle</div>
-        <div class="coordLine"><span class="coordVal" id="coordCurrentDMS">–</span></div>
+        <div class="coordLine"><span class="coordFmt">DD</span><span class="coordVal" id="coordCurrentDec">–</span></div>
+        <div class="coordLine"><span class="coordFmt">DM</span><span class="coordVal" id="coordCurrentDMM">–</span></div>
+        <div class="coordLine"><span class="coordFmt">DMS</span><span class="coordVal" id="coordCurrentDMS">–</span></div>
       </div>
       <div class="coordGroup">
         <div class="coordGroupLabel">Ancre</div>
-        <div class="coordLine"><span class="coordVal" id="coordAnchorDMS">–</span></div>
+        <div class="coordLine"><span class="coordFmt">DD</span><span class="coordVal" id="coordAnchorDec">–</span></div>
+        <div class="coordLine"><span class="coordFmt">DM</span><span class="coordVal" id="coordAnchorDMM">–</span></div>
+        <div class="coordLine"><span class="coordFmt">DMS</span><span class="coordVal" id="coordAnchorDMS">–</span></div>
       </div>
     </div>
 
@@ -355,10 +360,27 @@
     }
     return part(lat,'N','S',2) + '  ' + part(lon,'E','W',3);
   }
-  function showCoords(dmsEl, pos){
+  function fmtDMM(lat,lon){
+    function part(v, posLetter, negLetter, degDigits){
+      const letter = v>=0 ? posLetter : negLetter;
+      let {deg, min, sec} = dmsParts(v);
+      let minStr = (min + sec/60).toFixed(3);
+      if(parseFloat(minStr) >= 60){ minStr = '00.000'; deg += 1; }
+      return letter + ' ' + String(deg).padStart(degDigits,'0') + '°' + minStr.padStart(6,'0') + "'";
+    }
+    return part(lat,'N','S',2) + '  ' + part(lon,'E','W',3);
+  }
+  function fmtDec(lat,lon){
+    const latLetter = lat>=0 ? 'N' : 'S';
+    const lonLetter = lon>=0 ? 'E' : 'W';
+    return latLetter + ' ' + Math.abs(lat).toFixed(5) + '°  ' + lonLetter + ' ' + Math.abs(lon).toFixed(5) + '°';
+  }
+  function showCoords(decEl, dmmEl, dmsEl, pos){
+    $(decEl).textContent = pos ? fmtDec(pos.lat, pos.lon) : '–';
+    $(dmmEl).textContent = pos ? fmtDMM(pos.lat, pos.lon) : '–';
     $(dmsEl).textContent = pos ? fmtDMS(pos.lat, pos.lon) : '–';
   }
-  showCoords('coordAnchorDMS', state.anchor);
+  showCoords('coordAnchorDec','coordAnchorDMM','coordAnchorDMS', state.anchor);
 
   // ---- audio siren ----
   let actx=null, sirenOsc=null, sirenGain=null, sirenTimer=null;
@@ -526,7 +548,7 @@
       state.anchor = {lat:state.lastPos.lat, lon:state.lastPos.lon};
       breachCount = 0;
       save();
-      showCoords('coordAnchorDMS', state.anchor);
+      showCoords('coordAnchorDec','coordAnchorDMM','coordAnchorDMS', state.anchor);
       refreshAnchorVisual();
     }
   };
@@ -545,7 +567,7 @@
     }
     $('gpsPill').className = 'pill on'; $('gpsPill').innerHTML = '<span class="dot"></span> GPS actif';
     $('mAcc').textContent = Math.round(acc) + ' m';
-    showCoords('coordCurrentDMS', {lat,lon});
+    showCoords('coordCurrentDec','coordCurrentDMM','coordCurrentDMS', {lat,lon});
 
     if(state.anchor){
       const dist = haversine(state.anchor, {lat,lon});
@@ -604,7 +626,7 @@
     state.anchor = {lat:state.lastPos.lat, lon:state.lastPos.lon};
     breachCount = 0;
     save();
-    showCoords('coordAnchorDMS', state.anchor);
+    showCoords('coordAnchorDec','coordAnchorDMM','coordAnchorDMS', state.anchor);
     refreshAnchorVisual();
   };
 
@@ -653,7 +675,7 @@
     state.anchor = {lat, lon};
     breachCount = 0;
     save();
-    showCoords('coordAnchorDMS', state.anchor);
+    showCoords('coordAnchorDec','coordAnchorDMM','coordAnchorDMS', state.anchor);
     refreshAnchorVisual();
     $('manualAnchorDetails').open = false;
   };
@@ -678,7 +700,7 @@
     state.anchor = destinationPoint(state.anchor.lat, state.anchor.lon, brg, dist);
     breachCount = 0;
     save();
-    showCoords('coordAnchorDMS', state.anchor);
+    showCoords('coordAnchorDec','coordAnchorDMM','coordAnchorDMS', state.anchor);
     refreshAnchorVisual();
   };
 
