@@ -164,23 +164,23 @@
       <div id="manualDMS">
         <label class="field">Latitude</label>
         <div class="dmsRow">
+          <select id="latDir"><option value="N">N</option><option value="S">S</option></select>
           <input type="number" id="latDeg" min="0" max="90" step="1" placeholder="43">
           <span class="dmsSym">°</span>
           <input type="number" id="latMin" min="0" max="59" step="1" placeholder="30">
           <span class="dmsSym">'</span>
           <input type="number" id="latSec" min="0" max="59.9" step="0.1" placeholder="00.8">
           <span class="dmsSym">"</span>
-          <select id="latDir"><option value="N">N</option><option value="S">S</option></select>
         </div>
         <label class="field">Longitude</label>
         <div class="dmsRow">
+          <select id="lonDir"><option value="E">E</option><option value="W">W</option></select>
           <input type="number" id="lonDeg" min="0" max="180" step="1" placeholder="7">
           <span class="dmsSym">°</span>
           <input type="number" id="lonMin" min="0" max="59" step="1" placeholder="0">
           <span class="dmsSym">'</span>
           <input type="number" id="lonSec" min="0" max="59.9" step="0.1" placeholder="01.2">
           <span class="dmsSym">"</span>
-          <select id="lonDir"><option value="E">E</option><option value="W">W</option></select>
         </div>
       </div>
 
@@ -313,7 +313,7 @@
       let {deg, min, sec} = dmsParts(v);
       let secStr = sec.toFixed(1);
       if(parseFloat(secStr) >= 60){ secStr = '00.0'; min += 1; if(min>=60){ min=0; deg+=1; } }
-      return String(deg).padStart(degDigits,'0') + '°' + String(min).padStart(2,'0') + "'" + secStr.padStart(4,'0') + '"' + letter;
+      return letter + ' ' + String(deg).padStart(degDigits,'0') + '°' + String(min).padStart(2,'0') + "'" + secStr.padStart(4,'0') + '"';
     }
     return part(lat,'N','S',2) + '  ' + part(lon,'E','W',3);
   }
