@@ -372,25 +372,48 @@
   }
 
   // ---- radar drawing ----
+  // Échelle réelle fixe (pas seulement normalisée sur le rayon) : un rayon de
+  // 10 m et un rayon de 100 m doivent donner des cercles visiblement différents.
   const PX_R = 130;
+  const PX_MAX = 148; // bord du viewBox, pour laisser le bateau sortir visuellement du cercle en cas d'alarme
+  function currentScale(){
+    const baseRangeM = Math.max(100, state.radius); // 100 m de référence tant que le rayon réglé est plus petit
+    return PX_R / baseRangeM; // pixels par mètre
+  }
+  function updateRadiusCircle(){
+    const r = Math.min(state.radius * currentScale(), PX_R);
+    $('radiusCircle').setAttribute('r', r);
+  }
   function drawRadar(dist, brg){
     let px=150, py=150;
     if(state.anchor && dist!=null){
-      const scale = Math.min(dist, state.radius*1.4) / state.radius;
-      const clampedDist = Math.min(dist/state.radius, 1) * PX_R;
+      const pxDist = Math.min(dist * currentScale(), PX_MAX);
       const rad = toRad(brg||0);
-      px = 150 + clampedDist*Math.sin(rad);
-      py = 150 - clampedDist*Math.cos(rad);
+      px = 150 + pxDist*Math.sin(rad);
+      py = 150 - pxDist*Math.cos(rad);
     }
     $('boatDot').setAttribute('cx', px);
     $('boatDot').setAttribute('cy', py);
     $('boatDot').setAttribute('fill', (state.armed && dist!=null && dist>state.radius) ? '#ff4444' : '#2fd18b');
   }
 
+  function refreshAnchorVisual(){
+    updateRadiusCircle();
+    if(state.anchor && state.lastPos){
+      const d = haversine(state.anchor, state.lastPos);
+      const b = bearing(state.anchor, state.lastPos);
+      $('mDist').textContent = Math.round(d) + ' m';
+      drawRadar(d, b);
+    } else {
+      $('mDist').textContent = '–';
+      drawRadar(null, 0);
+    }
+  }
   function updateRadiusVisual(){
     $('mRadius').textContent = state.radius + ' m';
     $('radiusInput').value = state.radius;
     $('radiusRange').value = Math.min(state.radius,200);
+    refreshAnchorVisual();
   }
 
   // ---- alarm control ----
@@ -416,8 +439,10 @@
     clearAlarm();
     if(state.lastPos){
       state.anchor = {lat:state.lastPos.lat, lon:state.lastPos.lon};
+      breachCount = 0;
       save();
       showCoords('coordAnchorDec','coordAnchorDMM', state.anchor);
+      refreshAnchorVisual();
     }
   };
 
@@ -475,6 +500,7 @@
     breachCount = 0;
     save();
     showCoords('coordAnchorDec','coordAnchorDMM', state.anchor);
+    refreshAnchorVisual();
   };
 
   $('btnManualAnchor').onclick = ()=>{
@@ -488,6 +514,7 @@
     breachCount = 0;
     save();
     showCoords('coordAnchorDec','coordAnchorDMM', state.anchor);
+    refreshAnchorVisual();
     $('manualAnchorDetails').open = false;
   };
 
