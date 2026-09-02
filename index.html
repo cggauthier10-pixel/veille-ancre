@@ -157,11 +157,12 @@
       <summary>✏️ Régler l'ancre manuellement</summary>
 
       <div class="segmented" id="manualModeSeg">
-        <button type="button" class="segBtn active" data-mode="dms">Degrés / min / sec</button>
-        <button type="button" class="segBtn" data-mode="dec">Degrés décimaux</button>
+        <button type="button" class="segBtn" data-mode="dms">Deg / min / sec</button>
+        <button type="button" class="segBtn active" data-mode="dm">Deg + min déc.</button>
+        <button type="button" class="segBtn" data-mode="dec">Décimal</button>
       </div>
 
-      <div id="manualDMS">
+      <div id="manualDMS" style="display:none;">
         <label class="field">Latitude</label>
         <div class="dmsRow">
           <select id="latDir"><option value="N">N</option><option value="S">S</option></select>
@@ -184,6 +185,25 @@
         </div>
       </div>
 
+      <div id="manualDM">
+        <label class="field">Latitude — format de la plupart des traceurs, ex N 14° 27.379'</label>
+        <div class="dmsRow">
+          <select id="latDirDM"><option value="N">N</option><option value="S">S</option></select>
+          <input type="number" id="latDegDM" min="0" max="90" step="1" placeholder="14">
+          <span class="dmsSym">°</span>
+          <input type="number" id="latMinDM" min="0" max="59.999" step="0.001" placeholder="27.379">
+          <span class="dmsSym">'</span>
+        </div>
+        <label class="field">Longitude</label>
+        <div class="dmsRow">
+          <select id="lonDirDM"><option value="E">E</option><option value="W">W</option></select>
+          <input type="number" id="lonDegDM" min="0" max="180" step="1" placeholder="60">
+          <span class="dmsSym">°</span>
+          <input type="number" id="lonMinDM" min="0" max="59.999" step="0.001" placeholder="52.593">
+          <span class="dmsSym">'</span>
+        </div>
+      </div>
+
       <div id="manualDec" style="display:none;">
         <label class="field">Latitude, degrés décimaux (positif = N, négatif = S), ex 43.50021</label>
         <input type="text" inputmode="decimal" id="manualLat" placeholder="43.50021">
@@ -195,6 +215,18 @@
         <button id="btnManualAnchor" class="good">Définir l'ancre à ces coordonnées</button>
       </div>
       <div class="footNote">Utile pour reprendre exactement les coordonnées affichées par votre GPS/traceur de bord, ou pour ajuster la position réelle de l'ancre.</div>
+
+      <div class="footNote" style="margin-top:16px; color:var(--text); font-weight:600; opacity:1;">Décaler l'ancre déjà posée</div>
+      <div class="dmsRow" style="margin-top:6px;">
+        <input type="number" id="offsetDist" min="1" max="5000" step="1" placeholder="30">
+        <span class="dmsSym">m</span>
+        <input type="number" id="offsetBearing" min="0" max="359" step="1" placeholder="90">
+        <span class="dmsSym">° (cap)</span>
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <button id="btnOffsetAnchor" class="ghost">Décaler l'ancre</button>
+      </div>
+      <div class="footNote">Déplace précisément l'ancre déjà définie de la distance indiquée, dans la direction du cap donné (0°=Nord, 90°=Est, 180°=Sud, 270°=Ouest) — sans avoir à recalculer de coordonnées à la main.</div>
     </details>
     <div class="row">
       <button id="btnArm" class="primary">Armer la veille</button>
@@ -576,12 +608,13 @@
     refreshAnchorVisual();
   };
 
-  let manualMode = 'dms';
+  let manualMode = 'dm';
   document.querySelectorAll('#manualModeSeg .segBtn').forEach(btn=>{
     btn.onclick = ()=>{
       manualMode = btn.dataset.mode;
       document.querySelectorAll('#manualModeSeg .segBtn').forEach(b=>b.classList.toggle('active', b===btn));
       $('manualDMS').style.display = manualMode==='dms' ? '' : 'none';
+      $('manualDM').style.display = manualMode==='dm' ? '' : 'none';
       $('manualDec').style.display = manualMode==='dec' ? '' : 'none';
     };
   });
@@ -594,18 +627,27 @@
     const val = deg + min/60 + sec/3600;
     return (dir==='S' || dir==='W') ? -val : val;
   }
+  function dmToDecimal(deg, min, dir){
+    if(!isFinite(deg) || deg<0) return NaN;
+    if(!isFinite(min) || min<0 || min>=60) return NaN;
+    const val = deg + min/60;
+    return (dir==='S' || dir==='W') ? -val : val;
+  }
 
   $('btnManualAnchor').onclick = ()=>{
     let lat, lon;
     if(manualMode === 'dms'){
       lat = dmsToDecimal(parseFloat($('latDeg').value), parseFloat($('latMin').value), parseFloat($('latSec').value), $('latDir').value);
       lon = dmsToDecimal(parseFloat($('lonDeg').value), parseFloat($('lonMin').value), parseFloat($('lonSec').value), $('lonDir').value);
+    } else if(manualMode === 'dm'){
+      lat = dmToDecimal(parseFloat($('latDegDM').value), parseFloat($('latMinDM').value), $('latDirDM').value);
+      lon = dmToDecimal(parseFloat($('lonDegDM').value), parseFloat($('lonMinDM').value), $('lonDirDM').value);
     } else {
       lat = parseFloat(($('manualLat').value||'').replace(',','.'));
       lon = parseFloat(($('manualLon').value||'').replace(',','.'));
     }
     if(!isFinite(lat) || !isFinite(lon) || lat<-90 || lat>90 || lon<-180 || lon>180){
-      alert("Coordonnées invalides. Vérifiez les degrés, minutes (0-59) et secondes (0-59.9) saisis.");
+      alert("Coordonnées invalides. Vérifiez les degrés, minutes et secondes saisis (minutes et secondes < 60).");
       return;
     }
     state.anchor = {lat, lon};
@@ -614,6 +656,30 @@
     showCoords('coordAnchorDMS', state.anchor);
     refreshAnchorVisual();
     $('manualAnchorDetails').open = false;
+  };
+
+  function destinationPoint(lat1, lon1, bearingDeg, distM){
+    const δ = distM / R;
+    const θ = toRad(bearingDeg);
+    const φ1 = toRad(lat1), λ1 = toRad(lon1);
+    const φ2 = Math.asin(Math.sin(φ1)*Math.cos(δ) + Math.cos(φ1)*Math.sin(δ)*Math.cos(θ));
+    const λ2 = λ1 + Math.atan2(Math.sin(θ)*Math.sin(δ)*Math.cos(φ1), Math.cos(δ)-Math.sin(φ1)*Math.sin(φ2));
+    return { lat: φ2*180/Math.PI, lon: λ2*180/Math.PI };
+  }
+
+  $('btnOffsetAnchor').onclick = ()=>{
+    if(!state.anchor){ alert("Définissez d'abord une ancre (GPS ou coordonnées manuelles) avant de la décaler."); return; }
+    const dist = parseFloat($('offsetDist').value);
+    const brg = parseFloat($('offsetBearing').value);
+    if(!isFinite(dist) || dist<=0 || !isFinite(brg) || brg<0 || brg>=360){
+      alert("Distance ou cap invalide. Distance en mètres > 0, cap entre 0 et 359°.");
+      return;
+    }
+    state.anchor = destinationPoint(state.anchor.lat, state.anchor.lon, brg, dist);
+    breachCount = 0;
+    save();
+    showCoords('coordAnchorDMS', state.anchor);
+    refreshAnchorVisual();
   };
 
   $('btnArm').onclick = async ()=>{
