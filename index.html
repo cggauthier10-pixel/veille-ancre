@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="Veille d'Ancre">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 <style>
   :root{
     --bg:#0b1520; --panel:#101f30; --panel2:#152a40; --text:#e8f0f7; --muted:#7f97ab;
@@ -79,6 +80,8 @@
   .dmsRow select{background:var(--panel2); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:10px 6px; flex:none; font-size:.85rem;}
   details{margin-top:4px;}
   summary{cursor:pointer; color:var(--accent); font-size:.85rem; padding:6px 0;}
+  #map{height:300px; border-radius:10px; margin-top:8px; background:var(--panel2);}
+  #map .leaflet-control-attribution{font-size:.65rem;}
   .checkRow{display:flex; align-items:center; gap:8px; margin:8px 0; font-size:.85rem;}
   .checkRow input{width:18px; height:18px;}
   .footNote{font-size:.7rem; color:var(--muted); margin-top:6px; line-height:1.4;}
@@ -240,6 +243,14 @@
   </div>
 
   <div class="card">
+    <details id="mapDetails">
+      <summary>🗺️ Carte des environs de l'ancre</summary>
+      <div id="map"></div>
+      <div class="footNote">Fond OpenStreetMap + balises maritimes OpenSeaMap — nécessite une connexion internet pour charger la carte. Pincez pour zoomer, ou utilisez les boutons +/-. Le cercle bleu est le rayon de veille réglé, à l'échelle géographique réelle.</div>
+    </details>
+  </div>
+
+  <div class="card">
     <details id="notifDetails">
       <summary>🔔 Alertes à distance (WhatsApp / Email)</summary>
 
@@ -283,6 +294,7 @@
   <button id="btnReanchor" class="ghost">Réancrer ici et reprendre la veille</button>
 </div>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
 (function(){
   "use strict";
@@ -505,8 +517,47 @@
     $('boatDot').setAttribute('fill', (state.armed && dist!=null && dist>state.radius) ? '#ff4444' : '#2fd18b');
   }
 
+  // ---- carte géographique réelle (Leaflet, optionnelle, nécessite internet) ----
+  let leafletMap = null, mapAnchorMarker = null, mapBoatMarker = null, mapRadiusCircle = null;
+  function ensureMap(){
+    if(leafletMap || typeof L === 'undefined') return;
+    leafletMap = L.map('map', { zoomControl: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '© OpenStreetMap'
+    }).addTo(leafletMap);
+    L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
+      maxZoom: 18, attribution: 'OpenSeaMap'
+    }).addTo(leafletMap);
+    L.control.scale({metric:true, imperial:false}).addTo(leafletMap);
+    const center = state.anchor || state.lastPos || {lat:0, lon:0};
+    leafletMap.setView([center.lat, center.lon], state.anchor ? 16 : 3);
+    updateMapMarkers();
+  }
+  function updateMapMarkers(){
+    if(!leafletMap) return;
+    if(state.anchor){
+      const pos = [state.anchor.lat, state.anchor.lon];
+      if(!mapAnchorMarker) mapAnchorMarker = L.marker(pos, {title:"Ancre"}).addTo(leafletMap);
+      else mapAnchorMarker.setLatLng(pos);
+      if(!mapRadiusCircle) mapRadiusCircle = L.circle(pos, {radius: state.radius, color:'#2fb6ff', weight:2, fillOpacity:0.08}).addTo(leafletMap);
+      else { mapRadiusCircle.setLatLng(pos); mapRadiusCircle.setRadius(state.radius); }
+    }
+    if(state.lastPos){
+      const pos = [state.lastPos.lat, state.lastPos.lon];
+      if(!mapBoatMarker) mapBoatMarker = L.circleMarker(pos, {radius:8, color:'#04241a', weight:2, fillColor:'#2fd18b', fillOpacity:1}).addTo(leafletMap);
+      else mapBoatMarker.setLatLng(pos);
+    }
+  }
+  $('mapDetails').addEventListener('toggle', ()=>{
+    if($('mapDetails').open){
+      ensureMap();
+      setTimeout(()=>{ if(leafletMap) leafletMap.invalidateSize(); }, 150);
+    }
+  });
+
   function refreshAnchorVisual(){
     updateRadiusCircle();
+    updateMapMarkers();
     if(state.anchor && state.lastPos){
       const d = haversine(state.anchor, state.lastPos);
       const b = bearing(state.anchor, state.lastPos);
@@ -569,6 +620,7 @@
     $('gpsPill').className = 'pill on'; $('gpsPill').innerHTML = '<span class="dot"></span> GPS actif';
     $('mAcc').textContent = Math.round(acc) + ' m';
     showCoords('coordCurrentDec','coordCurrentDMM','coordCurrentDMS', {lat,lon});
+    updateMapMarkers();
 
     if(state.anchor){
       const dist = haversine(state.anchor, {lat,lon});
