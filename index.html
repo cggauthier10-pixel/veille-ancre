@@ -171,21 +171,21 @@
         <label class="field">Latitude</label>
         <div class="dmsRow">
           <select id="latDir"><option value="N">N</option><option value="S">S</option></select>
-          <input type="number" id="latDeg" min="0" max="90" step="1" placeholder="43">
+          <input type="text" inputmode="decimal" id="latDeg" placeholder="43">
           <span class="dmsSym">°</span>
-          <input type="number" id="latMin" min="0" max="59" step="1" placeholder="30">
+          <input type="text" inputmode="decimal" id="latMin" placeholder="30">
           <span class="dmsSym">'</span>
-          <input type="number" id="latSec" min="0" max="59.9" step="0.1" placeholder="00.8">
+          <input type="text" inputmode="decimal" id="latSec" placeholder="00.8">
           <span class="dmsSym">"</span>
         </div>
         <label class="field">Longitude</label>
         <div class="dmsRow">
           <select id="lonDir"><option value="E">E</option><option value="W">W</option></select>
-          <input type="number" id="lonDeg" min="0" max="180" step="1" placeholder="7">
+          <input type="text" inputmode="decimal" id="lonDeg" placeholder="7">
           <span class="dmsSym">°</span>
-          <input type="number" id="lonMin" min="0" max="59" step="1" placeholder="0">
+          <input type="text" inputmode="decimal" id="lonMin" placeholder="0">
           <span class="dmsSym">'</span>
-          <input type="number" id="lonSec" min="0" max="59.9" step="0.1" placeholder="01.2">
+          <input type="text" inputmode="decimal" id="lonSec" placeholder="01.2">
           <span class="dmsSym">"</span>
         </div>
       </div>
@@ -194,17 +194,17 @@
         <label class="field">Latitude — format de la plupart des traceurs, ex N 14° 27.379'</label>
         <div class="dmsRow">
           <select id="latDirDM"><option value="N">N</option><option value="S">S</option></select>
-          <input type="number" id="latDegDM" min="0" max="90" step="1" placeholder="14">
+          <input type="text" inputmode="decimal" id="latDegDM" placeholder="14">
           <span class="dmsSym">°</span>
-          <input type="number" id="latMinDM" min="0" max="59.999" step="0.001" placeholder="27.379">
+          <input type="text" inputmode="decimal" id="latMinDM" placeholder="27.379">
           <span class="dmsSym">'</span>
         </div>
         <label class="field">Longitude</label>
         <div class="dmsRow">
           <select id="lonDirDM"><option value="E">E</option><option value="W">W</option></select>
-          <input type="number" id="lonDegDM" min="0" max="180" step="1" placeholder="60">
+          <input type="text" inputmode="decimal" id="lonDegDM" placeholder="60">
           <span class="dmsSym">°</span>
-          <input type="number" id="lonMinDM" min="0" max="59.999" step="0.001" placeholder="52.593">
+          <input type="text" inputmode="decimal" id="lonMinDM" placeholder="52.593">
           <span class="dmsSym">'</span>
         </div>
       </div>
@@ -223,9 +223,9 @@
 
       <div class="footNote" style="margin-top:16px; color:var(--text); font-weight:600; opacity:1;">Décaler l'ancre déjà posée</div>
       <div class="dmsRow" style="margin-top:6px;">
-        <input type="number" id="offsetDist" min="1" max="5000" step="1" placeholder="30">
+        <input type="text" inputmode="decimal" id="offsetDist" placeholder="30">
         <span class="dmsSym">m</span>
-        <input type="number" id="offsetBearing" min="0" max="359" step="1" placeholder="90">
+        <input type="text" inputmode="decimal" id="offsetBearing" placeholder="90">
         <span class="dmsSym">° (cap)</span>
       </div>
       <div class="row" style="margin-top:8px;">
@@ -288,6 +288,7 @@
   "use strict";
 
   const $ = id => document.getElementById(id);
+  const numVal = id => parseFloat(($(id).value||'').trim().replace(',','.'));
   const NOTIF_DEFAULTS = { waEnabled:false, waPhone:'', waKey:'', emailEnabled:false, emailTo:'', ejsService:'', ejsTemplate:'', ejsKey:'', gpsLossSec:60 };
   const state = load();
 
@@ -659,14 +660,14 @@
   $('btnManualAnchor').onclick = ()=>{
     let lat, lon;
     if(manualMode === 'dms'){
-      lat = dmsToDecimal(parseFloat($('latDeg').value), parseFloat($('latMin').value), parseFloat($('latSec').value), $('latDir').value);
-      lon = dmsToDecimal(parseFloat($('lonDeg').value), parseFloat($('lonMin').value), parseFloat($('lonSec').value), $('lonDir').value);
+      lat = dmsToDecimal(numVal('latDeg'), numVal('latMin'), numVal('latSec'), $('latDir').value);
+      lon = dmsToDecimal(numVal('lonDeg'), numVal('lonMin'), numVal('lonSec'), $('lonDir').value);
     } else if(manualMode === 'dm'){
-      lat = dmToDecimal(parseFloat($('latDegDM').value), parseFloat($('latMinDM').value), $('latDirDM').value);
-      lon = dmToDecimal(parseFloat($('lonDegDM').value), parseFloat($('lonMinDM').value), $('lonDirDM').value);
+      lat = dmToDecimal(numVal('latDegDM'), numVal('latMinDM'), $('latDirDM').value);
+      lon = dmToDecimal(numVal('lonDegDM'), numVal('lonMinDM'), $('lonDirDM').value);
     } else {
-      lat = parseFloat(($('manualLat').value||'').replace(',','.'));
-      lon = parseFloat(($('manualLon').value||'').replace(',','.'));
+      lat = numVal('manualLat');
+      lon = numVal('manualLon');
     }
     if(!isFinite(lat) || !isFinite(lon) || lat<-90 || lat>90 || lon<-180 || lon>180){
       alert("Coordonnées invalides. Vérifiez les degrés, minutes et secondes saisis (minutes et secondes < 60).");
@@ -691,8 +692,8 @@
 
   $('btnOffsetAnchor').onclick = ()=>{
     if(!state.anchor){ alert("Définissez d'abord une ancre (GPS ou coordonnées manuelles) avant de la décaler."); return; }
-    const dist = parseFloat($('offsetDist').value);
-    const brg = parseFloat($('offsetBearing').value);
+    const dist = numVal('offsetDist');
+    const brg = numVal('offsetBearing');
     if(!isFinite(dist) || dist<=0 || !isFinite(brg) || brg<0 || brg>=360){
       alert("Distance ou cap invalide. Distance en mètres > 0, cap entre 0 et 359°.");
       return;
