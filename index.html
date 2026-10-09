@@ -27,6 +27,7 @@
   #app{max-width:520px; margin:0 auto; padding:14px 14px 40px;}
   h1{font-size:1.15rem; margin:6px 0 2px; display:flex; align-items:center; gap:8px;}
   .sub{color:var(--muted); font-size:.8rem; margin-bottom:14px;}
+  .banner.soundWarn{background:#3a0f0f; border-color:#7a1c1c; color:#ffd6d6; cursor:pointer; font-size:.85rem;}
   .banner{
     background:#2a1d0d; border:1px solid #6b4a10; color:#ffcf80; border-radius:10px;
     padding:10px 12px; font-size:.78rem; line-height:1.35; margin-bottom:14px;
@@ -109,6 +110,10 @@
 
   <div class="banner">
     <b>Important (iPhone) :</b> iOS coupe le GPS des pages web quand l'écran se verrouille. Pour une vraie fiabilité pendant la nuit, laissez le téléphone <b>déverrouillé, à l'écran allumé et en charge</b> près de vous pendant que la veille est armée. L'appli empêche l'écran de s'éteindre automatiquement tant qu'elle est armée.
+  </div>
+
+  <div id="soundWarn" class="banner soundWarn" style="display:none;">
+    🔊 <b>Son de l'alarme non activé.</b> Touchez ici (ou n'importe où) pour l'activer — sans cela, l'alarme sonore ne se déclenchera pas.
   </div>
 
   <div class="card">
@@ -252,6 +257,10 @@
       <button id="btnArm" class="primary">Armer la veille</button>
       <button id="btnNight" class="ghost">🌙 Mode nuit</button>
     </div>
+    <div class="row">
+      <button id="btnTestSound" class="ghost">🔊 Tester le son de l'alarme</button>
+    </div>
+    <div class="footNote" id="soundTestMsg">Faites ce test avant chaque nuit : vous devez entendre la sirène pendant 3 secondes. Réglez le volume du téléphone/iPad au maximum (volume « multimédia » : touches de volume, pas la sonnerie).</div>
   </div>
 
   <div class="card">
@@ -294,6 +303,7 @@
 <div id="overlay">
   <h2>⚠️ ALARME — DÉRAPAGE D'ANCRE</h2>
   <p id="overlayDist">Distance : – m (rayon : – m)</p>
+  <button id="btnEnableSound" class="primary" style="display:none;">🔊 TOUCHEZ ICI POUR ACTIVER LE SON</button>
   <button id="btnStopAlarm" class="bad">Arrêter l'alarme</button>
   <button id="btnReanchor" class="ghost">Réancrer ici et reprendre la veille</button>
 </div>
@@ -400,34 +410,106 @@
   showCoords('coordAnchorDec','coordAnchorDMM','coordAnchorDMS', state.anchor);
 
   // ---- audio siren ----
-  let actx=null, sirenOsc=null, sirenGain=null, sirenTimer=null;
-  function unlockAudio(){
-    if(!actx){ actx = new (window.AudioContext||window.webkitAudioContext)(); }
-    if(actx.state === 'suspended') actx.resume();
-    const buf = actx.createBuffer(1,1,22050);
-    const src = actx.createBufferSource(); src.buffer=buf; src.connect(actx.destination); src.start(0);
+  // Sirène principale : élément <audio> lisant un WAV généré (sirène à balayage 650-1400 Hz,
+  // onde carrée pleine puissance). Sur iOS, un élément <audio> n'est PAS coupé par le
+  // commutateur silencieux, contrairement à l'API Web Audio. Web Audio ne sert que de secours.
+  let actx=null, sirenOsc=null, sirenGain=null, sirenSweep=null, sirenTimer=null;
+  let alarmAudioEl=null, audioUnlocked=false, testTimer=null;
+
+  function buildSirenWavUrl(){
+    const sr=22050, dur=2.0, n=Math.floor(sr*dur);
+    const buf=new ArrayBuffer(44+n*2), v=new DataView(buf);
+    const wr=(o,s)=>{ for(let i=0;i<s.length;i++) v.setUint8(o+i, s.charCodeAt(i)); };
+    wr(0,'RIFF'); v.setUint32(4,36+n*2,true); wr(8,'WAVE'); wr(12,'fmt ');
+    v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+    v.setUint32(24,sr,true); v.setUint32(28,sr*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true);
+    wr(36,'data'); v.setUint32(40,n*2,true);
+    let phase=0;
+    for(let i=0;i<n;i++){
+      const x=i/n, tri = x<0.5 ? x*2 : (1-x)*2;          // 0 -> 1 -> 0
+      phase += 2*Math.PI*(650+750*tri)/sr;
+      v.setInt16(44+i*2, Math.sin(phase)>=0 ? 30000 : -30000, true);
+    }
+    return URL.createObjectURL(new Blob([buf], {type:'audio/wav'}));
   }
-  function startSiren(){
-    if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
-    if(actx.state==='suspended') actx.resume();
+  function getAlarmAudio(){
+    if(!alarmAudioEl){
+      alarmAudioEl = new Audio(buildSirenWavUrl());
+      alarmAudioEl.loop = true;
+      alarmAudioEl.preload = 'auto';
+      alarmAudioEl.volume = 1;
+      alarmAudioEl.setAttribute('playsinline','');
+    }
+    return alarmAudioEl;
+  }
+  function setAudioSessionPlayback(){
+    try{ if(navigator.audioSession) navigator.audioSession.type = 'playback'; }catch(e){}
+  }
+  function updateSoundStatus(){
+    $('soundWarn').style.display = (state.armed && !audioUnlocked) ? 'block' : 'none';
+  }
+  // À appeler depuis un geste de l'utilisateur (clic/toucher) : autorise ensuite la lecture automatique.
+  function unlockAudio(){
+    setAudioSessionPlayback();
+    if(!actx){ try{ actx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+    if(actx && actx.state!=='running') actx.resume().catch(()=>{});
+    const a = getAlarmAudio();
+    if(alarmActive){ a.muted=false; a.play().then(()=>{ audioUnlocked=true; updateSoundStatus(); }).catch(()=>{}); return; }
+    a.muted = true;
+    const p = a.play();
+    const done = ()=>{ a.pause(); a.currentTime=0; a.muted=false; };
+    if(p && p.then) p.then(()=>{ done(); audioUnlocked=true; updateSoundStatus(); }).catch(()=>{ a.muted=false; });
+    else { done(); audioUnlocked=true; updateSoundStatus(); }
+  }
+
+  function startWebAudioSiren(){
+    if(!actx){ try{ actx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return; } }
+    if(actx.state!=='running') actx.resume().catch(()=>{});
+    if(sirenOsc) return;
     sirenOsc = actx.createOscillator();
     sirenGain = actx.createGain();
-    sirenOsc.type='sawtooth';
-    sirenGain.gain.value=0.25;
+    sirenOsc.type = 'square';
+    sirenGain.gain.value = 1.0;
     sirenOsc.connect(sirenGain).connect(actx.destination);
     sirenOsc.start();
-    let up=true;
-    sirenTimer = setInterval(()=>{
-      const t=actx.currentTime;
-      sirenOsc.frequency.setTargetAtTime(up?1200:650, t, 0.05);
-      up=!up;
-    }, 450);
+    let up = true;
+    sirenSweep = setInterval(()=>{
+      if(sirenOsc){ sirenOsc.frequency.setTargetAtTime(up?1400:650, actx.currentTime, 0.1); up=!up; }
+    }, 500);
+  }
+  function stopWebAudioSiren(){
+    if(sirenSweep){ clearInterval(sirenSweep); sirenSweep=null; }
+    if(sirenOsc){ try{sirenOsc.stop();}catch(e){} try{sirenOsc.disconnect();}catch(e){} sirenOsc=null; }
+  }
+  function soundBlocked(){
+    startWebAudioSiren();
+    $('btnEnableSound').style.display = 'block';
+  }
+  function startSiren(){
+    setAudioSessionPlayback();
+    const a = getAlarmAudio();
+    a.muted = false; a.volume = 1; a.currentTime = 0;
+    const p = a.play();
+    if(p && p.catch) p.catch(soundBlocked);
+    sirenTimer = setInterval(()=>{            // relance si iOS a interrompu la lecture
+      if(a.paused) a.play().catch(soundBlocked);
+    }, 1500);
     if(navigator.vibrate) navigator.vibrate([600,300,600,300,600,300,600]);
   }
   function stopSiren(){
-    if(sirenTimer) clearInterval(sirenTimer);
-    if(sirenOsc){ try{sirenOsc.stop();}catch(e){} sirenOsc.disconnect(); sirenOsc=null; }
+    if(sirenTimer){ clearInterval(sirenTimer); sirenTimer=null; }
+    if(alarmAudioEl){ alarmAudioEl.pause(); alarmAudioEl.currentTime=0; }
+    stopWebAudioSiren();
     if(navigator.vibrate) navigator.vibrate(0);
+    $('btnEnableSound').style.display = 'none';
+  }
+  // Toucher l'écran (alarme affichée) relance le son si le navigateur l'avait bloqué.
+  function retrySirenFromGesture(){
+    if(!alarmActive) return;
+    const a = getAlarmAudio();
+    a.muted = false;
+    a.play().then(()=>{ audioUnlocked=true; stopWebAudioSiren(); $('btnEnableSound').style.display='none'; updateSoundStatus(); }).catch(()=>{});
+    if(actx && actx.state!=='running') actx.resume().catch(()=>{});
   }
 
   // ---- wake lock ----
@@ -604,6 +686,26 @@
     $('overlay').style.display='none';
     stopSiren();
   }
+  $('btnEnableSound').onclick = retrySirenFromGesture;
+  $('overlay').addEventListener('pointerdown', retrySirenFromGesture);
+  $('soundWarn').onclick = unlockAudio;
+  // Tout toucher (veille armée mais son pas encore débloqué, ex. app rouverte) débloque le son.
+  document.addEventListener('pointerdown', ()=>{ if(state.armed && !audioUnlocked) unlockAudio(); }, {passive:true});
+
+  $('btnTestSound').onclick = ()=>{
+    setAudioSessionPlayback();
+    const a = getAlarmAudio();
+    if(actx && actx.state!=='running') actx.resume().catch(()=>{});
+    $('soundTestMsg').textContent = '🔊 Sirène en cours (3 secondes)… Si vous n\'entendez rien : augmentez le volume avec les touches de volume (pas la sonnerie), vérifiez que l\'appareil n\'est pas en mode silencieux/Bluetooth.';
+    a.muted = false; a.volume = 1; a.currentTime = 0;
+    a.play().then(()=>{ audioUnlocked=true; updateSoundStatus(); }).catch(()=>{ startWebAudioSiren(); });
+    clearTimeout(testTimer);
+    testTimer = setTimeout(()=>{
+      if(!alarmActive){ a.pause(); a.currentTime=0; stopWebAudioSiren(); }
+      $('soundTestMsg').textContent = 'Test terminé. Si vous avez entendu la sirène, l\'alarme sonore fonctionnera. Sinon, relancez le test après avoir monté le volume.';
+    }, 3000);
+  };
+
   $('btnStopAlarm').onclick = ()=>{ clearAlarm(); };
   $('btnReanchor').onclick = ()=>{
     clearAlarm();
@@ -683,6 +785,7 @@
     $('armPill').innerHTML = '<span class="dot"></span> ' + (state.armed?'Armée':'Désarmée');
     $('btnArm').textContent = state.armed ? 'Désarmer' : 'Armer la veille';
     $('btnArm').className = state.armed ? 'bad' : 'primary';
+    updateSoundStatus();
   }
 
   $('btnAnchor').onclick = ()=>{
